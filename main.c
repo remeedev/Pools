@@ -237,9 +237,131 @@ LRESULT optionsMenu(HWND hwnd){
     EndPaint(hwnd, &ps);
 }
 
+HWND *mainWin;
+
+// exits filling menu and goes back to main menu
+void quitPool(HWND hwnd){
+    DestroyWindow(hwnd);
+    ShowCursor(FALSE);
+    ShowWindow(*mainWin, SW_NORMAL);
+}
+
+// Draw of secondary window
+LRESULT invisMenu(HWND hwnd){
+    RECT size;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &size, 0);
+    SetWindowPos(hwnd, NULL, 0, 0, size.right-size.left, size.bottom-size.top, SWP_SHOWWINDOW);
+    RECT windowRect;
+    GetClientRect(hwnd, &windowRect);
+    PAINTSTRUCT ps;
+    HDC hdc;
+    hdc = BeginPaint(hwnd, &ps);
+    setBackground(hwnd, RGB(0, 0, 0), hdc);
+    POINT mousePos = getMousePos(hwnd);
+    if (pointCollideRect(mousePos, (RECT){windowRect.right-400, windowRect.bottom-225, windowRect.right, windowRect.bottom})){
+        AddButton(hwnd, hdc, windowRect.right-300, windowRect.bottom-125, "QUIT", &quitPool);
+    }
+    AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-100, windowRect.bottom-10, 12, hdc);
+    EndPaint(hwnd, &ps);
+}
+
+// Handle a button click
+void buttonClick(HWND hwnd){
+    buttonNode *elem = firstnode;
+    elem = elem->next;
+    POINT mousePos = getMousePos(hwnd);
+    int counter = 0;
+    while (elem){
+        if (pointCollideRect(mousePos, elem->position)){
+            elem->callback(hwnd);
+        }
+        elem = elem->next;
+        counter++;
+    }
+}
+
+// Handles messages of the secondary window
+LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
+    switch(msg){
+        case WM_CREATE:
+            SetTimer(hwnd, 1, 25, NULL);
+            ShowCursor(TRUE);
+            SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            ShowWindow(*mainWin, SW_NORMAL);
+            break;
+        case WM_LBUTTONDOWN:
+            buttonClick(hwnd);
+            break;
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            break;
+        case WM_PAINT:
+            invisMenu(hwnd);
+            break;
+        case WM_TIMER:
+            InvalidateRect(hwnd, NULL, FALSE);
+            break;
+        default:
+            return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
+    return 0;
+}
+
 // Starts a session
 void start(HWND hwnd){
     ShowWindow(hwnd, SW_HIDE);
+    mainWin = &hwnd;
+    WNDCLASSEX wc;
+    HWND newWnd;
+    MSG msg;
+    const char *className = "invis";
+    wc.cbSize = sizeof(WNDCLASSEX);
+    wc.style = 0;
+    wc.lpfnWndProc = XtrProc;
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = 0;
+    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    wc.hInstance = NULL;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = 0;
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = className;
+    wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+
+    if (!RegisterClassEx(&wc)){
+        MessageBox(NULL, "Window Registration Failedddd!", "sad", MB_ICONEXCLAMATION | MB_OK);
+    }
+
+    RECT size;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &size, 0);
+
+    newWnd = CreateWindowEx(
+        WS_EX_COMPOSITED | WS_EX_TOPMOST | WS_EX_LAYERED,
+        className,
+        "Pools",
+        WS_BORDER,
+        0, 0,size.right-size.left, size.bottom-size.top,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    );
+    
+    if (newWnd == NULL){
+        MessageBox(NULL, "No window for u", "sad", MB_ICONEXCLAMATION | MB_OK);
+    }
+
+    SetWindowLong(newWnd, GWL_STYLE, 0);
+
+    ShowWindow(newWnd, SW_NORMAL);
+    UpdateWindow(newWnd);
+    while(GetMessage(&msg, NULL, 0, 0) > 0){
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
 }
 
 // Start Menu
@@ -269,17 +391,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             ShowCursor(FALSE);
             break;
         case WM_LBUTTONDOWN:
-            buttonNode *elem = firstnode;
-            elem = elem->next;
-            POINT mousePos = getMousePos(hwnd);
-            int counter = 0;
-            while (elem){
-                if (pointCollideRect(mousePos, elem->position)){
-                    elem->callback(hwnd);
-                }
-                elem = elem->next;
-                counter++;
-            }
+            buttonClick(hwnd);
             break;
         case WM_CLOSE:
             DestroyWindow(hwnd);

@@ -1,9 +1,60 @@
 #include <windows.h>
 #include <gdiplus.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include <stdio.h>
 
+// Linked list for button management (Not creating windows for buttons)
+typedef struct InputNode {
+    RECT position;
+    char **text;
+    bool numeric;
+    struct InputNode *next;
+} InputNode;
+
+// Stores the position of currently being written text
+InputNode *currentTyping;
+
+// Text that stores the amount of time to focus in minutes
+char *timeFilling = "";
+int timeLeft;
+int timerInterval = 25;
+int timerCounter = 0;
+
+// Default text when not entering input
+char *nun = "";
+
+// Deletes all inputs in the linked list, freeing the space
+void deleteInputNodes(){
+    InputNode *elem = currentTyping;
+    elem = elem->next;
+    while (elem){
+        InputNode *prev = elem;
+        elem = elem->next;
+        free(prev);
+    }
+    currentTyping->next = NULL;
+}
+// Function to create a basic node
+InputNode *createInputNode(RECT rect, char **content, bool numeric){
+    InputNode *node = (InputNode *)malloc(sizeof(InputNode));
+    node->position = rect;
+    node->text = content;
+    node->numeric = numeric;
+    node->next = NULL;
+    return node;
+}
+
+// Creates basic node and pushes it to the end of the linked list
+void pushNewInput(RECT rect, char *content[100], bool numeric){
+    InputNode *node = createInputNode(rect, content, numeric);
+    InputNode *elem = currentTyping;
+    while (elem->next){
+        elem = elem->next;
+    }
+    elem->next = node;
+}
 // Linked list for button management (Not creating windows for buttons)
 typedef struct buttonNode {
     RECT position;
@@ -14,6 +65,18 @@ typedef struct buttonNode {
 buttonNode *firstnode;
 int buttonLength = 0;
 
+// Deletes all buttons in the linked list, freeing the space
+void deleteButtonNodes(){
+    buttonNode *elem = firstnode;
+    elem = elem->next;
+    while (elem){
+        buttonNode *prev = elem;
+        elem = elem->next;
+        free(prev);
+        buttonLength--;
+    }
+    firstnode->next = NULL;
+}
 // Function to create a basic node
 buttonNode *createButtonNode(RECT rect, void (*cb)()){
     buttonNode *node = (buttonNode *)malloc(sizeof(buttonNode));
@@ -25,7 +88,7 @@ buttonNode *createButtonNode(RECT rect, void (*cb)()){
 }
 
 // Creates basic node and pushes it to the end of the linked list
-void pushNewNode(RECT rect, void(* cb)()){
+void pushNewButton(RECT rect, void(* cb)()){
     buttonNode *node = createButtonNode(rect, cb);
     buttonNode *elem = firstnode;
     while (elem->next){
@@ -124,19 +187,6 @@ void printHello(){
     printf("A button was clicked\n");
 }
 
-// Deletes all buttons in the linked list, freeing the space
-void deleteButtonNodes(){
-    buttonNode *elem = firstnode;
-    elem = elem->next;
-    while (elem){
-        buttonNode *prev = elem;
-        elem = elem->next;
-        free(prev);
-        buttonLength--;
-    }
-    firstnode->next = NULL;
-}
-
 // Creates a button and adds it to the buttons linked list
 void AddButton(HWND hwnd, HDC hdc, int x, int y, char *text, void (*callback)()){
     int width = 300;
@@ -149,11 +199,36 @@ void AddButton(HWND hwnd, HDC hdc, int x, int y, char *text, void (*callback)())
         drawImage(hwnd, hdc, x, y, width, height, "./assets/button.bmp");
     }
     if (callback == NULL){
-        pushNewNode(rect, &printHello);
+        pushNewButton(rect, &printHello);
     }else{
-        pushNewNode(rect, callback);
+        pushNewButton(rect, callback);
     }
     AddText(hwnd, text, (int)(x+width/2), (int)(y+(height)/2)+13, 26, hdc);
+}
+
+// Creates a button and adds it to the buttons linked list
+void AddInput(HWND hwnd, HDC hdc, int x, int y, char *placeholder, bool numeric, char **content){
+    int widthPerCharacter = 25;
+    int width;
+    if (content != currentTyping->text){
+        width = widthPerCharacter*strlen(placeholder);
+    }else{
+        width = widthPerCharacter*(strlen(*content)+1);
+    }
+    int height = 80;
+    RECT rect = {x, y, x+width, y+height};
+    POINT mousePos = getMousePos(hwnd);
+    pushNewInput(rect, content, numeric);
+    if (pointCollideRect(mousePos, rect) || currentTyping->text == content){
+        drawImage(hwnd, hdc, x, y, width, height, "./assets/text-selected.bmp");
+    }else{
+        drawImage(hwnd, hdc, x, y, width, height, "./assets/text.bmp");
+    }
+    if (*content == "" && currentTyping->text != content){
+        AddText(hwnd, placeholder, (int)(x+width/2), (int)(y+(height)/2)+13, 26, hdc);
+    }else{
+        AddText(hwnd, *content, (int)(x+width/2), (int)(y+(height)/2)+13, 26, hdc);
+    }
 }
 
 // Creates custom circle at the cursor position
@@ -248,9 +323,6 @@ void quitPool(HWND hwnd){
 
 // Draw of secondary window
 LRESULT invisMenu(HWND hwnd){
-    RECT size;
-    SystemParametersInfo(SPI_GETWORKAREA, 0, &size, 0);
-    SetWindowPos(hwnd, NULL, 0, 0, size.right-size.left, size.bottom-size.top, SWP_SHOWWINDOW);
     RECT windowRect;
     GetClientRect(hwnd, &windowRect);
     PAINTSTRUCT ps;
@@ -262,6 +334,9 @@ LRESULT invisMenu(HWND hwnd){
         AddButton(hwnd, hdc, windowRect.right-300, windowRect.bottom-125, "QUIT", &quitPool);
     }
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-100, windowRect.bottom-10, 12, hdc);
+    char timeString[16];
+    sprintf(timeString, "%d", timeLeft);
+    AddText(hwnd, timeString, windowRect.right-200, windowRect.top+50, 56, hdc);
     EndPaint(hwnd, &ps);
 }
 
@@ -302,6 +377,15 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             invisMenu(hwnd);
             break;
         case WM_TIMER:
+            timerCounter++;
+            if (timerCounter == 1000/timerInterval){
+                timeLeft--;
+                timerCounter = 0;
+            }
+            if (timeLeft == 0){
+                quitPool(hwnd);
+                break;
+            }
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         default:
@@ -313,6 +397,7 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 // Starts a session
 void start(HWND hwnd){
     ShowWindow(hwnd, SW_HIDE);
+    timeLeft = atoi(timeFilling);
     mainWin = &hwnd;
     WNDCLASSEX wc;
     HWND newWnd;
@@ -332,7 +417,6 @@ void start(HWND hwnd){
     wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
     if (!RegisterClassEx(&wc)){
-        MessageBox(NULL, "Window Registration Failedddd!", "sad", MB_ICONEXCLAMATION | MB_OK);
     }
 
     RECT size;
@@ -374,14 +458,58 @@ LRESULT startMenu(HWND hwnd){
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddText(hwnd, "CONFIRM", (int)(windowRect.right/2), 100, 64, hdc);
     AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
+    AddInput(hwnd, hdc, 50, 250, "TIME (MINUTES)", true, &timeFilling);
     AddButton(hwnd, hdc, 50, windowRect.bottom-100, "START", &start);
     DrawCursor(hwnd, hdc);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
     EndPaint(hwnd, &ps);
 }
 
+// Handle an input click
+void inputClick(HWND hwnd){
+    InputNode *elem = currentTyping;
+    elem = elem->next;
+    POINT mousePos = getMousePos(hwnd);
+    while (elem){
+        if (pointCollideRect(mousePos, elem->position)){
+            currentTyping = elem;
+            return;
+        }
+        elem = elem->next;
+    }
+    currentTyping->text = &nun;
+    return;
+}
+
 // Create array of functions of paint
 LRESULT (*menus[])(HWND) = {&OnPaint, &optionsMenu, &shopMenu, &startMenu};
+
+char * appendChar(char * source, char end){
+    char *copy = malloc(sizeof(char)*(strlen(source)+2));
+    char *t;
+    int count = 0;
+    for (t = source; *t != '\0'; t++){
+        *(copy+count++) = *t;
+    }
+    *(copy+count++) = end;
+    *(copy+count) = '\0';
+    return copy;
+}
+
+char * removeLastChar(char * source, char end){
+    if (strlen(source) == 0){
+        return source;
+    }
+    char *copy = malloc(sizeof(char)*(strlen(source)));
+    char *t;
+    int count = 0;
+    for (t = source; *t != '\0'; t++){
+        *(copy+count++) = *t;
+    }
+    *(copy+(--count)) = '\0';
+    return copy;
+}
+
 
 // Handles messages of the main window
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
@@ -392,6 +520,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             break;
         case WM_LBUTTONDOWN:
             buttonClick(hwnd);
+            inputClick(hwnd);
             break;
         case WM_CLOSE:
             DestroyWindow(hwnd);
@@ -402,10 +531,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             break;
         case WM_PAINT:
             deleteButtonNodes();
+            deleteInputNodes();
             menus[currentMenu](hwnd);
             break;
         case WM_TIMER:
             InvalidateRect(hwnd, NULL, FALSE);
+            break;
+        case WM_CHAR:
+            if (strlen(*(currentTyping->text)) > 16){
+                break;
+            }
+            if (((int) wParam >= 97 && (int) wParam <= 122 && currentTyping->numeric == false) || ((int) wParam >= 48 && (int) wParam <= 57)){
+                char * newText = appendChar(*(currentTyping->text), (char)wParam);
+                *(currentTyping->text) = newText;
+            }
+            if ((int) wParam == 8){
+                char * newText = removeLastChar(*(currentTyping->text), (char)wParam);
+                *(currentTyping->text) = newText;
+            }
             break;
         default:
             return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -416,6 +559,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 // Creates the main window
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
     firstnode = createButtonNode((RECT){-15, -15, -69, -69}, NULL);
+    currentTyping = createInputNode((RECT){-15, -15, -69, -69}, &nun, false);
     const char class_name[] = "windowClass";
     WNDCLASSEX wc;
     MSG msg;

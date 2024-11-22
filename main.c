@@ -19,8 +19,10 @@ InputNode *currentTyping;
 // Text that stores the amount of time to focus in minutes
 char *timeFilling = "";
 int timeLeft;
-int timerInterval = 25;
+int timerInterval = (int)(1000/15);
 int timerCounter = 0;
+
+bool drawing = false;
 
 // Default text when not entering input
 char *nun = "";
@@ -119,13 +121,11 @@ void drawImage(HWND hwnd, HDC hdc, int x, int y, int width, int height, char* na
     HBITMAP bmp = LoadImage(NULL, (LPCSTR)name, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     HDC copy = CreateCompatibleDC(NULL);
     SelectObject(copy, bmp);
-    HDC hdc_x = GetDC(hwnd);
     BITMAP bm;
     // get size of original image
     GetObject(bmp, sizeof(BITMAP), &bm);
-    StretchBlt(hdc_x, x, y, width, height, copy, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY); // Draw the image with custom width and height (Stretches image)
+    StretchBlt(hdc, x, y, width, height, copy, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY); // Draw the image with custom width and height (Stretches image)
     DeleteObject(copy);
-    ReleaseDC(hwnd, hdc_x);
     DeleteObject(bmp);
 }
 
@@ -145,7 +145,7 @@ void setBackground(HWND hwnd, COLORREF Color, HDC hdc){
     HBRUSH hbrush;
     hbrush = CreateSolidBrush(Color);
     CreateSolidBrush(Color);
-    RECT rect = {0, 0, clientRect.right, clientRect.bottom};
+    RECT rect = {clientRect.left, clientRect.top, clientRect.right, clientRect.bottom};
     FillRect(hdc, &rect, hbrush);
     DeleteObject(hbrush);
 }
@@ -189,7 +189,9 @@ void printHello(){
 
 // Creates a button and adds it to the buttons linked list
 void AddButton(HWND hwnd, HDC hdc, int x, int y, char *text, void (*callback)()){
-    int width = 300;
+    int widthPerCharacter = 25;
+    int width;
+    width = widthPerCharacter*(strlen(text)+1);
     int height = 80;
     RECT rect = {x, y, x+width, y+height};
     POINT mousePos = getMousePos(hwnd);
@@ -224,18 +226,11 @@ void AddInput(HWND hwnd, HDC hdc, int x, int y, char *placeholder, bool numeric,
     }else{
         drawImage(hwnd, hdc, x, y, width, height, "./assets/text.bmp");
     }
-    if (*content == "" && currentTyping->text != content){
+    if (strlen(*content) == 0 && currentTyping->text != content){
         AddText(hwnd, placeholder, (int)(x+width/2), (int)(y+(height)/2)+13, 26, hdc);
     }else{
         AddText(hwnd, *content, (int)(x+width/2), (int)(y+(height)/2)+13, 26, hdc);
     }
-}
-
-// Creates custom circle at the cursor position
-void DrawCursor(HWND hwnd, HDC hdc){
-    POINT cursorPos = getMousePos(hwnd); 
-    drawEllipse(hwnd, hdc, RGB(12, 12, 12), cursorPos.x, cursorPos.y, 5);
-    drawEllipse(hwnd, hdc, RGB(35, 35, 35), cursorPos.x, cursorPos.y, 3);
 }
 
 // Simple quit window for the quit button
@@ -277,7 +272,6 @@ LRESULT OnPaint (HWND hwnd){
     AddButton(hwnd, hdc, 50, 525, "OPTIONS", &options);
     AddButton(hwnd, hdc, 50, (windowRect.bottom*0.15)+100, "SHOP", &shop);
     AddButton(hwnd, hdc, 50, (windowRect.bottom*0.15), "START SESSION", &confirm);
-    DrawCursor(hwnd, hdc);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
     EndPaint(hwnd, &ps);
 }
@@ -292,7 +286,6 @@ LRESULT shopMenu(HWND hwnd){
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddText(hwnd, "SHOP", (int)(windowRect.right/2), 100, 64, hdc);
     AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
-    DrawCursor(hwnd, hdc);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
     EndPaint(hwnd, &ps);
 }
@@ -307,7 +300,6 @@ LRESULT optionsMenu(HWND hwnd){
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddText(hwnd, "OPTIONS", (int)(windowRect.right/2), 100, 64, hdc);
     AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
-    DrawCursor(hwnd, hdc);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
     EndPaint(hwnd, &ps);
 }
@@ -317,7 +309,6 @@ HWND *mainWin;
 // exits filling menu and goes back to main menu
 void quitPool(HWND hwnd){
     DestroyWindow(hwnd);
-    ShowCursor(FALSE);
     ShowWindow(*mainWin, SW_NORMAL);
 }
 
@@ -334,8 +325,22 @@ LRESULT invisMenu(HWND hwnd){
         AddButton(hwnd, hdc, windowRect.right-300, windowRect.bottom-125, "QUIT", &quitPool);
     }
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-100, windowRect.bottom-10, 12, hdc);
+    int minutes = (int)(timeLeft/60);
+    int seconds = (int)(timeLeft%60);
+    char minutesString[5];
+    char secondsString[5];
+    if (minutes < 10){
+        sprintf(minutesString, "0%d", minutes);
+    }else{
+        sprintf(minutesString, "%d", minutes);
+    }
+    if (seconds < 10){
+        sprintf(secondsString, "0%d", seconds);
+    }else{
+        sprintf(secondsString, "%d", seconds);
+    }
     char timeString[16];
-    sprintf(timeString, "%d", timeLeft);
+    sprintf(timeString, "%s:%s", minutesString, secondsString);
     AddText(hwnd, timeString, windowRect.right-200, windowRect.top+50, 56, hdc);
     EndPaint(hwnd, &ps);
 }
@@ -360,7 +365,6 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
     switch(msg){
         case WM_CREATE:
             SetTimer(hwnd, 1, 25, NULL);
-            ShowCursor(TRUE);
             SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
             break;
         case WM_CLOSE:
@@ -396,8 +400,12 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 
 // Starts a session
 void start(HWND hwnd){
+    if (strlen(timeFilling) == 0 || atoi(timeFilling) == 0){
+        timeFilling = "";
+        return;
+    }
     ShowWindow(hwnd, SW_HIDE);
-    timeLeft = atoi(timeFilling);
+    timeLeft = 60*atoi(timeFilling);
     mainWin = &hwnd;
     WNDCLASSEX wc;
     HWND newWnd;
@@ -448,21 +456,67 @@ void start(HWND hwnd){
     }
 }
 
+// Convert int to char *
+char * convertInt(int num){
+    int length = 0;
+    int lengthNum = num;
+    while (lengthNum != 0){
+        length++;
+        lengthNum = (int)(lengthNum - (lengthNum%10))/10;
+    }
+    char assignation[10] = "0123456789";
+    char *tempString = malloc(sizeof(char) * (length+1));
+    int count = 0;
+    while(count != length){
+        *((tempString+length-1)-(count++)) = (char)(assignation[num%10]);
+        num = (int)(num - (num%10))/10;
+    }
+    *(tempString+length) = '\0';
+    return tempString;
+}
+
+// Increase the timerFilling by ten 
+void increaseTime(HWND _){
+    if (strlen(timeFilling) == 0){
+        timeFilling = "10";
+        return;
+    }
+    int temp = atoi(timeFilling) + 10;
+    timeFilling = convertInt(temp);
+}
+
+// Decrease the timerFilling by ten 
+void decreaseTime(HWND _){
+    if (strlen(timeFilling) == 0){
+        timeFilling = "10";
+        return;
+    }
+    if (atoi(timeFilling) < 10){
+        timeFilling = "";
+        return;
+    }
+    int temp = atoi(timeFilling) - 10;
+    timeFilling = convertInt(temp);
+}
+
 // Start Menu
 LRESULT startMenu(HWND hwnd){
+    drawing = true;
     RECT windowRect;
     GetClientRect(hwnd, &windowRect);
     PAINTSTRUCT ps;
     HDC hdc;
     hdc = BeginPaint(hwnd, &ps);
     setBackground(hwnd, RGB(189, 128, 75), hdc);
-    AddText(hwnd, "CONFIRM", (int)(windowRect.right/2), 100, 64, hdc);
-    AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
-    AddInput(hwnd, hdc, 50, 250, "TIME (MINUTES)", true, &timeFilling);
+    AddButton(hwnd, hdc, 50, 50, "BACK", &resetCounter);
+    AddInput(hwnd, hdc, 50, 150, "TIME (MINUTES)", true, &timeFilling);
+    AddButton(hwnd, hdc, 50, 250, "+", &increaseTime);
+    AddButton(hwnd, hdc, 125, 250, "-", &decreaseTime);
     AddButton(hwnd, hdc, 50, windowRect.bottom-100, "START", &start);
-    DrawCursor(hwnd, hdc);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
+    ReleaseDC(hwnd, hdc);
     EndPaint(hwnd, &ps);
+    drawing = false;
 }
 
 // Handle an input click
@@ -516,8 +570,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
     switch(msg){
         case WM_CREATE:
             SetTimer(hwnd, 1, 25, NULL);
-            ShowCursor(FALSE);
             break;
+        case WM_ERASEBKGND:
+            return 1;
         case WM_LBUTTONDOWN:
             buttonClick(hwnd);
             inputClick(hwnd);
@@ -535,7 +590,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             menus[currentMenu](hwnd);
             break;
         case WM_TIMER:
-            InvalidateRect(hwnd, NULL, FALSE);
+            if (!drawing){
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
             break;
         case WM_CHAR:
             if (strlen(*(currentTyping->text)) > 16){
@@ -569,7 +626,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wc.hCursor = LoadCursor(NULL, IDC_HAND);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hInstance = hInstance;
     wc.lpszClassName = class_name;
     wc.hbrBackground = (HBRUSH)(0);

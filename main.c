@@ -260,12 +260,7 @@ void confirm(HWND _){
 }
 
 // Draws all of the elements of the main menu
-LRESULT OnPaint (HWND hwnd){
-    RECT windowRect;
-    GetClientRect(hwnd, &windowRect);
-    PAINTSTRUCT ps;
-    HDC hdc;
-    hdc = BeginPaint(hwnd, &ps);
+LRESULT OnPaint (HWND hwnd, PAINTSTRUCT ps, HDC hdc, RECT windowRect){
     setBackgroundImage(hwnd, hdc, "./assets/mainbg.bmp");
     AddText(hwnd, "POOLS", (int) (windowRect.right/2), (int) (windowRect.bottom*0.12), 84, hdc);
     AddButton(hwnd, hdc, 50, 625, "QUIT", &quitWindow);
@@ -273,35 +268,22 @@ LRESULT OnPaint (HWND hwnd){
     AddButton(hwnd, hdc, 50, (windowRect.bottom*0.15)+100, "SHOP", &shop);
     AddButton(hwnd, hdc, 50, (windowRect.bottom*0.15), "START SESSION", &confirm);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
-    EndPaint(hwnd, &ps);
 }
 
 // Shop Menu
-LRESULT shopMenu(HWND hwnd){
-    RECT windowRect;
-    GetClientRect(hwnd, &windowRect);
-    PAINTSTRUCT ps;
-    HDC hdc;
-    hdc = BeginPaint(hwnd, &ps);
+LRESULT shopMenu(HWND hwnd, PAINTSTRUCT ps, HDC hdc, RECT windowRect){
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddText(hwnd, "SHOP", (int)(windowRect.right/2), 100, 64, hdc);
     AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
-    EndPaint(hwnd, &ps);
 }
 
 // Options Menu
-LRESULT optionsMenu(HWND hwnd){
-    RECT windowRect;
-    GetClientRect(hwnd, &windowRect);
-    PAINTSTRUCT ps;
-    HDC hdc;
-    hdc = BeginPaint(hwnd, &ps);
+LRESULT optionsMenu(HWND hwnd, PAINTSTRUCT ps, HDC hdc, RECT windowRect){
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddText(hwnd, "OPTIONS", (int)(windowRect.right/2), 100, 64, hdc);
     AddButton(hwnd, hdc, 50, 150, "BACK", &resetCounter);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
-    EndPaint(hwnd, &ps);
 }
 
 HWND *mainWin;
@@ -500,13 +482,8 @@ void decreaseTime(HWND _){
 }
 
 // Start Menu
-LRESULT startMenu(HWND hwnd){
+LRESULT startMenu(HWND hwnd, PAINTSTRUCT ps, HDC hdc, RECT windowRect){
     drawing = true;
-    RECT windowRect;
-    GetClientRect(hwnd, &windowRect);
-    PAINTSTRUCT ps;
-    HDC hdc;
-    hdc = BeginPaint(hwnd, &ps);
     setBackground(hwnd, RGB(189, 128, 75), hdc);
     AddButton(hwnd, hdc, 50, 50, "BACK", &resetCounter);
     AddInput(hwnd, hdc, 50, 150, "TIME (MINUTES)", true, &timeFilling);
@@ -514,8 +491,6 @@ LRESULT startMenu(HWND hwnd){
     AddButton(hwnd, hdc, 125, 250, "-", &decreaseTime);
     AddButton(hwnd, hdc, 50, windowRect.bottom-100, "START", &start);
     AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-180, windowRect.bottom-10, 24, hdc);
-    ReleaseDC(hwnd, hdc);
-    EndPaint(hwnd, &ps);
     drawing = false;
 }
 
@@ -536,7 +511,7 @@ void inputClick(HWND hwnd){
 }
 
 // Create array of functions of paint
-LRESULT (*menus[])(HWND) = {&OnPaint, &optionsMenu, &shopMenu, &startMenu};
+LRESULT (*menus[])(HWND, PAINTSTRUCT, HDC, RECT) = {&OnPaint, &optionsMenu, &shopMenu, &startMenu};
 
 char * appendChar(char * source, char end){
     char *copy = malloc(sizeof(char)*(strlen(source)+2));
@@ -585,9 +560,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             PostQuitMessage(0);
             break;
         case WM_PAINT:
+            RECT windowRect;
+            GetClientRect(hwnd, &windowRect);
+            PAINTSTRUCT ps;
+            HDC hdc;
+            hdc = BeginPaint(hwnd, &ps);
             deleteButtonNodes();
             deleteInputNodes();
-            menus[currentMenu](hwnd);
+            menus[currentMenu](hwnd, ps, hdc, windowRect);
+            ReleaseDC(hwnd, hdc);
+            EndPaint(hwnd, &ps);
             break;
         case WM_TIMER:
             if (!drawing){

@@ -19,7 +19,7 @@ InputNode *currentTyping;
 // Text that stores the amount of time to focus in minutes
 char *timeFilling = "";
 int timeLeft;
-int timerInterval = (int)(1000/15);
+int timerInterval = 50;
 int timerCounter = 0;
 
 bool drawing = false;
@@ -346,7 +346,7 @@ void buttonClick(HWND hwnd){
 LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
     switch(msg){
         case WM_CREATE:
-            SetTimer(hwnd, 1, 25, NULL);
+            SetTimer(hwnd, 1, timerInterval, NULL);
             SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
             break;
         case WM_CLOSE:
@@ -364,7 +364,7 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             break;
         case WM_TIMER:
             timerCounter++;
-            if (timerCounter == 1000/timerInterval){
+            if (timerCounter >= 1000/timerInterval){
                 timeLeft--;
                 timerCounter = 0;
             }

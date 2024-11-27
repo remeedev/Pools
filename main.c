@@ -57,6 +57,7 @@ void pushNewInput(RECT rect, char *content[100], bool numeric){
     }
     elem->next = node;
 }
+
 // Linked list for button management (Not creating windows for buttons)
 typedef struct buttonNode {
     RECT position;
@@ -129,8 +130,19 @@ void drawImage(HWND hwnd, HDC hdc, int x, int y, int width, int height, char* na
     DeleteObject(bmp);
 }
 
+// Create Menu Counter
+int currentMenu = 0;
+
+// Add a menu buffer to save current menu
+int menuBuffer = -1;
+
 // Function to set the background of window to be an image (Bitmap)
 void setBackgroundImage(HWND hwnd, HDC hdc, char* name){
+    if (currentMenu == menuBuffer && timeLeft == 0){
+        return;
+    }else{
+        menuBuffer = currentMenu;
+    }
     RECT windowBounds;
     GetWindowRect(hwnd, &windowBounds);
     int width = windowBounds.right-windowBounds.left;
@@ -140,6 +152,11 @@ void setBackgroundImage(HWND hwnd, HDC hdc, char* name){
 
 // Function to set background to be static color
 void setBackground(HWND hwnd, COLORREF Color, HDC hdc){
+    if (currentMenu == menuBuffer && timeLeft == 0){
+        return;
+    }else{
+        menuBuffer = currentMenu;
+    }
     RECT clientRect;
     GetClientRect(hwnd, &clientRect);
     HBRUSH hbrush;
@@ -212,11 +229,12 @@ void AddButton(HWND hwnd, HDC hdc, int x, int y, char *text, void (*callback)())
 void AddInput(HWND hwnd, HDC hdc, int x, int y, char *placeholder, bool numeric, char **content){
     int widthPerCharacter = 25;
     int width;
-    if (content != currentTyping->text){
-        width = widthPerCharacter*strlen(placeholder);
-    }else{
-        width = widthPerCharacter*(strlen(*content)+1);
-    }
+    //if (content != currentTyping->text){
+    width = widthPerCharacter*strlen(placeholder);
+    //}
+    //else{
+    //    width = widthPerCharacter*(strlen(*content)+1);
+    //}
     int height = 80;
     RECT rect = {x, y, x+width, y+height};
     POINT mousePos = getMousePos(hwnd);
@@ -237,9 +255,6 @@ void AddInput(HWND hwnd, HDC hdc, int x, int y, char *placeholder, bool numeric,
 void quitWindow(){
     PostQuitMessage(0);
 }
-
-// Create Menu Counter
-int currentMenu = 0;
 
 // Reset counter
 void resetCounter(HWND _){
@@ -304,9 +319,9 @@ LRESULT invisMenu(HWND hwnd){
     setBackground(hwnd, RGB(0, 0, 0), hdc);
     POINT mousePos = getMousePos(hwnd);
     if (pointCollideRect(mousePos, (RECT){windowRect.right-400, windowRect.bottom-225, windowRect.right, windowRect.bottom})){
-        AddButton(hwnd, hdc, windowRect.right-300, windowRect.bottom-125, "QUIT", &quitPool);
+        AddButton(hwnd, hdc, windowRect.right-130, windowRect.bottom-125, "QUIT", &quitPool);
+        AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-100, windowRect.bottom-10, 12, hdc);
     }
-    AddText(hwnd, "CREATED BY REMEEDEV", windowRect.right-100, windowRect.bottom-10, 12, hdc);
     int minutes = (int)(timeLeft/60);
     int seconds = (int)(timeLeft%60);
     char minutesString[5];
@@ -323,7 +338,7 @@ LRESULT invisMenu(HWND hwnd){
     }
     char timeString[16];
     sprintf(timeString, "%s:%s", minutesString, secondsString);
-    AddText(hwnd, timeString, windowRect.right-200, windowRect.top+50, 56, hdc);
+    AddText(hwnd, timeString, windowRect.right-125, windowRect.top+50, 56, hdc);
     EndPaint(hwnd, &ps);
 }
 

@@ -6,6 +6,100 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// includes for currently running processes
+#include <psapi.h>
+#include <tchar.h>
+
+// Store process IDs in a linked list
+typedef struct ProcessNode {
+    DWORD id;
+    struct ProcessNode *next;
+} ProcessNode;
+
+ProcessNode *_process = NULL;
+
+void deleteProcessNodes(){
+    if (_process == NULL){
+        return;
+    }
+    ProcessNode *elem = _process;
+    elem = elem->next;
+    while (elem){
+        ProcessNode *prev = elem;
+        elem = elem->next;
+        free(prev);
+    }
+    _process->next = NULL;
+}
+ProcessNode *createProcessNode(DWORD id){
+    ProcessNode *node = (ProcessNode *)malloc(sizeof(ProcessNode));
+    node->id = id;
+    node->next = NULL;
+    return node;
+}
+
+void pushNewProcess(DWORD id){
+    ProcessNode *node = createProcessNode(id);
+    ProcessNode *elem = _process;
+    while (elem->next){
+        elem = elem->next;
+    }
+    elem->next = node;
+}
+
+bool inProcesses(DWORD id){
+    ProcessNode *elem = _process->next;
+    while (elem){
+        if (elem->id == id){
+            return true;
+        }
+        elem = elem->next;
+    }
+    return false;
+}
+
+// Function to print a currently running process
+void printProcess(DWORD processID){
+    TCHAR szProcessName[MAX_PATH] = TEXT("<unkown>");
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processID);
+    if (NULL != hProcess){
+        HMODULE hMod;
+        DWORD cbNeeded;
+        if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded)){
+            GetModuleBaseName(hProcess, hMod, szProcessName, sizeof(szProcessName)/sizeof(TCHAR));
+        }
+    }
+    printf("%s  (PID: %u)\n", szProcessName, processID);
+
+    CloseHandle(hProcess);
+}
+
+int printAllProcesses(){
+    DWORD aProcesses[1024], cbNeeded, cProcesses;
+    unsigned int i;
+    if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded)){
+        printf("No processes...\n");
+        return 1;
+    }
+    cProcesses = cbNeeded / sizeof(DWORD);
+    bool creating = _process == NULL;
+    if (creating){
+        _process = createProcessNode(0);
+    }
+    for (i = 0; i < cProcesses; i++){
+        if(aProcesses[i] != 0){
+            if (creating){
+                pushNewProcess(aProcesses[i]);
+            }else{
+                if (!inProcesses(aProcesses[i])){
+                    printProcess(aProcesses[i]);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 #pragma comment ("lib", "gdiplus.lib")
 
 int buying = -1;
@@ -199,12 +293,14 @@ int currentMenu = 0;
 
 // Add a menu buffer to save current menu
 int menuBuffer = -1;
+bool forceRedraw = false;
 
 // Function to set the background of window to be an image (Bitmap)
 void setBackgroundImage(HWND hwnd, HDC hdc, char* name){
-    if (currentMenu == menuBuffer && timeLeft == 0){
+    if (currentMenu == menuBuffer && timeLeft == 0 && !forceRedraw){
         return;
     }else{
+        forceRedraw = false;
         menuBuffer = currentMenu;
     }
     RECT windowBounds;
@@ -216,9 +312,10 @@ void setBackgroundImage(HWND hwnd, HDC hdc, char* name){
 
 // Function to set background to be static color
 void setBackground(HWND hwnd, COLORREF Color, HDC hdc){
-    if (currentMenu == menuBuffer && timeLeft == 0){
+    if (currentMenu == menuBuffer && timeLeft == 0 && !forceRedraw){
         return;
     }else{
+        forceRedraw = false;
         menuBuffer = currentMenu;
     }
     RECT clientRect;
@@ -471,6 +568,7 @@ HWND *mainWin;
 
 // exits filling menu and goes back to main menu
 void quitPool(HWND hwnd){
+    timeLeft = 0;
     DestroyWindow(hwnd);
     ShowWindow(*mainWin, SW_NORMAL);
 }
@@ -549,6 +647,7 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
                 timeLeft--;
                 timerCounter = 0;
                 minuteCounter++;
+                printAllProcesses();
             }
             if(minuteCounter >= 60){
                 waterTilesFilled++;
@@ -575,6 +674,9 @@ void start(HWND hwnd){
         timeFilling = "";
         return;
     }
+    deleteProcessNodes();
+    _process = NULL;
+    printAllProcesses();
     ShowWindow(hwnd, SW_HIDE);
     timeLeft = 60*atoi(timeFilling);
     mainWin = &hwnd;
@@ -1010,6 +1112,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             ReleaseDC(hwnd, hdc);
             EndPaint(hwnd, &ps);
             break;
+        case WM_SETFOCUS:
+            forceRedraw = true;
         case WM_TIMER:
             if (!drawing){
                 InvalidateRect(hwnd, NULL, FALSE);

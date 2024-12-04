@@ -10,6 +10,12 @@
 #include <psapi.h>
 #include <tchar.h>
 
+// ALSO WORKS FOR LINUX ?!?!?!?!?
+#include <dirent.h>
+#include <errno.h>
+
+#pragma comment ("lib", "gdiplus.lib")
+
 // Store process IDs in a linked list
 typedef struct ProcessNode {
     DWORD id;
@@ -75,6 +81,36 @@ void printProcess(DWORD processID){
 }
 
 int printAllProcesses(){
+    bool creating = _process == NULL;
+    if (creating){
+        _process = createProcessNode(0);
+    }
+    int notIn;
+    DIR* d = opendir("/proc");
+    if (d){
+        struct dirent *dir;
+        while ((dir = readdir(d)) != NULL){
+            char path[256];
+            sprintf(path, "/proc/%s/comm", dir->d_name);
+            FILE *comm = fopen(path, "r");
+            if (comm != NULL){
+                char name[256];
+                fgets(name, 256, comm);
+                if (creating){
+                    pushNewProcess(atoi(dir->d_name));
+                }else{
+                    if(!inProcesses(atoi(dir->d_name))){
+                        notIn++;
+                    }
+                }
+            }
+        }
+        closedir(d);
+        if (creating){
+            return 0;
+        }
+        return notIn;
+    }
     DWORD aProcesses[1024], cbNeeded, cProcesses;
     unsigned int i;
     if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded)){
@@ -82,25 +118,19 @@ int printAllProcesses(){
         return 1;
     }
     cProcesses = cbNeeded / sizeof(DWORD);
-    bool creating = _process == NULL;
-    if (creating){
-        _process = createProcessNode(0);
-    }
     for (i = 0; i < cProcesses; i++){
         if(aProcesses[i] != 0){
             if (creating){
                 pushNewProcess(aProcesses[i]);
             }else{
                 if (!inProcesses(aProcesses[i])){
-                    printProcess(aProcesses[i]);
+                    notIn++;
                 }
             }
         }
     }
-    return 0;
+    return notIn;
 }
-
-#pragma comment ("lib", "gdiplus.lib")
 
 int buying = -1;
 bool plantOrder = false;
@@ -165,6 +195,44 @@ void addToInventory(int item){
         }
     }
     return;
+}
+
+// Function to read inventory
+void loadInventory(){
+    FILE *invFile = fopen("inv.txt", "r");
+    if (invFile == NULL){
+        for (int i = 0; i < inventoryLength-1; i++){
+            inventory[i] = -1;
+        }
+        return;
+    }
+    int count = 0;
+    char content[100];
+    while (fgets(content, 100, invFile)){
+        inventory[count++] = atoi(content);
+    }
+    while(count < inventoryLength){
+        inventory[count++] = -1;
+    }
+    fclose(invFile);
+}
+
+// Function to save inventory
+void saveInventory(){
+    FILE *invFile = fopen("inv.txt", "w");
+    fprintf(invFile, "");
+    fclose(invFile);
+    invFile = fopen("inv.txt", "a");
+    for (int i = 0; i < inventoryLength; i++){
+        if (inventory[i] == -1){
+            break;
+        }
+        fprintf(invFile, convertInt(inventory[i]));
+        if (i + 1 != inventoryLength || inventory[i+1] != -1){
+            fprintf(invFile, "\n");
+        }
+    }
+    fclose(invFile);
 }
 
 // Default text when not entering input
@@ -647,7 +715,10 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
                 timeLeft--;
                 timerCounter = 0;
                 minuteCounter++;
-                printAllProcesses();
+                if (printAllProcesses() > 50){
+                    quitPool(hwnd);
+                    break;
+                };
             }
             if(minuteCounter >= 60){
                 waterTilesFilled++;
@@ -655,6 +726,7 @@ LRESULT CALLBACK XtrProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
             }
             if (timeLeft == 0){
                 addToInventory(buying);
+                saveInventory();
                 buying = -1;
                 currentMenu = 0;
                 quitPool(hwnd);
@@ -1148,9 +1220,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 // Creates the main window
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
     // Initiate inv menu
-    for (int i = 0; i < inventoryLength; i++){
-        inventory[i] = -1;
-    }
+    loadInventory();
     firstnode = createButtonNode((RECT){-15, -15, -69, -69}, NULL);
     currentTyping = createInputNode((RECT){-15, -15, -69, -69}, &nun, false);
     const char class_name[] = "windowClass";
